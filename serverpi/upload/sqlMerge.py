@@ -152,24 +152,27 @@ class sqlMerge(object):
         return True
 
     # Sharepoint upload - requires uname and password in plain text
-    #
-    #def upload_sp (self, file_a, username, password):
-    #
-    #    from office365.runtime.auth.authentication_context import AuthenticationContext
-    #    from office365.sharepoint.client_context import ClientContext
-    #    from datetime import datetime
-    #
-    #    baseurl = 'https://leeds365.sharepoint.com'
-    #    basesite = '/sites/TEAM-SEEAQProjects'
-    #    siteurl = baseurl + basesite
-    #    localpath = file_a
-    #    timestamp=datetime.utcnow().strftime("%Y%m%d%H%M%S")
-    #    remotepath = 'Shared%20Documents/db_files/server_{}.db'.format(timestamp)
-    #    ctx_auth = AuthenticationContext(siteurl)
-    #    ctx_auth.acquire_token_for_user(username, password)
-    #   ctx = ClientContext(siteurl, ctx_auth)
-    #    with open(localpath, 'rb') as content_file:
-    #        file_content = content_file.read()
-    #
-    #    dir, name = os.path.split(remotepath)
-    #    file = ctx.web.get_folder_by_server_relative_url(dir).upload_file(name, file_content).execute_query()
+
+    def upload_sp (self, file_name, username, password):
+
+        from office365.runtime.auth.authentication_context import AuthenticationContext
+        from office365.runtime.auth.user_credential import UserCredential
+        from office365.sharepoint.client_context import ClientContext
+        from datetime import datetime
+
+        baseurl = 'https://leeds365.sharepoint.com'
+        basesite = '/sites/TEAM-BiB-Breathes'
+        siteurl = baseurl + basesite
+        localpath = file_name
+        timestamp=datetime.utcnow().strftime("%Y%m%d%H%M%S")
+        remotepath = 'Shared%20Documents/db_files/server_{}.db'.format(timestamp)
+        credentials = UserCredential(username, password)
+        #ctx_auth = AuthenticationContext(siteurl)
+        #ctx_auth.acquire_token_for_user(username, password)
+        #ctx = ClientContext(siteurl, ctx_auth)
+        ctx = ClientContext(siteurl).with_credentials(credentials)
+        with open(localpath, 'rb') as content_file:
+            file_content = content_file.read()
+
+        dir, name = os.path.split(remotepath)
+        file = ctx.web.get_folder_by_server_relative_url(dir).upload_file(name, file_content).execute_query()
