@@ -238,7 +238,7 @@ while True:
             if DATE != LAST_UPLOAD:
                 #check if connected to wifi
                 ## SYNC
-                success = upload.sync()
+                success = upload.upload()
 
                 if success:
                     log.debug('upload complete on {}, hour = {}'.format(DATE, hour))

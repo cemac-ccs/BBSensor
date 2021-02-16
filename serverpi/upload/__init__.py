@@ -172,7 +172,7 @@ def stage(SERIAL,__RDIR__):
 #
 #    return True
 
-def sync():
+def upload():
 
     from .sqlMerge import sqlMerge
     from glob import glob
