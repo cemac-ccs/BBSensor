@@ -1,5 +1,5 @@
 #from .. import R1
-from ..R1 import alpha,info,poll,keep
+from ..SensorMod.R1 import alpha,info,poll,keep
 import time,sys
 
 if sys.version[0] != '3':
