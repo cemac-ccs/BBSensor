@@ -42,7 +42,18 @@ if [[ $rc -eq 0 ]] ; then                  # Make final determination.
     # Update the repo, with retries incase the sensor is not connected to the internet.
 
     while [ $COUNT -lt $RETRIES ]; do
-        cd ${LOC}/BBSensor && git pull >> ${LOC}/git.log 2>&1
+        cd ${LOC}/BBSensor && git pull --recurse-submodules >> ${LOC}/git.log 2>&1;
+        # get submodules for first time if directories present but empty
+        if [ -d ${LOC}/BBSensor/py-opc-R1 ] && [ ! "$(ls -A ${LOC}/BBSensor/py-opc-R1)" ]; then
+            cd ${LOC}/BBSensor && git submodule update --init --recursive >> ${LOC}/git.log 2>&1
+        fi
+         if [ -d ${LOC}/BBSensor/sensorpi/SensorMod ] && [ ! "$(ls -A ${LOC}/BBSensor/sensorpi/SensorMod)" ]; then
+            cd ${LOC}/BBSensor && git submodule update --init --recursive >> ${LOC}/git.log 2>&1
+        fi
+        # run the super command just incase
+        #cd ${LOC}/BBSensor &&git pull && git submodule init && git submodule update && git submodule status
+        cd ${LOC}/BBSensor/sensorpi/SensorMod && git checkout main && git pull origin main>> ${LOC}/git.log 2>&1;
+        echo 'github';
 
         if [ $? -eq 0 ]; then
             RETRIES=0
@@ -54,7 +65,7 @@ if [[ $rc -eq 0 ]] ; then                  # Make final determination.
 fi
 
 
-# transfer rules of usb transfer if they dont exist and reboot. 
+# transfer rules of usb transfer if they dont exist and reboot.
 if [ ! -f "/etc/udev/rules.d/optional_usb.rules" ]; then
     echo "Adding USB transfer rules";
 
