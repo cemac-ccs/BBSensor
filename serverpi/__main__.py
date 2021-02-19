@@ -4,11 +4,11 @@
 """
 SERVERPI LIBRARY
 
-A library to run the portable sensors for the born in brandford project.
+A library to run the portable sensors for the born in bradford project.
 
 Project: Born In Bradford Breathes
 
-Usage : python3 -m sensorpi
+Usage : python3 -m serverpi
 
 """
 
@@ -16,56 +16,91 @@ __author__ = "Christopher Symonds, Dan Ellis"
 __copyright__ = "Copyright 2020, University of Leeds"
 __credits__ = ["Dan Ellis", "Christopher Symonds", "Jim McQuaid", "Kirsty Pringle"]
 __license__ = "MIT"
-__version__ = "0.4.1"
+__version__ = "0.5.0"
 __maintainer__ = "C. Symonds"
 __email__ = "C.C.Symonds@leeds.ac.uk"
 __status__ = "Prototype"
 
 # Built-in/Generic Imports
-import time,sys,os
-from re import sub
+import time,sys,os,pickle
 from datetime import date,datetime
-
-# Check Modules
-from .tests import pyvers
-from .geolocate import lat,lon,alt
-loc = {'lat':lat,'lon':lon,'alt':alt}
-from .log_manager import getlog
-log = getlog(__name__)
-print = log.print ## replace print function with a wrapper
-log.info('########################################################'.replace('#','~'))
-
-# Exec modules
-from .exitcondition import GPIO
-from . import power
-from .crypt import scramble
-from . import db
-from .db import builddb, __RDIR__
-from . import upload
+from re import sub
 
 ########################################################
 ##  Running Parameters
 ########################################################
 
 ## runtime constants
-SERIAL = os.popen('cat /sys/firmware/devicetree/base/serial-number').read() #16 char key
-DATE   = date.today().strftime("%d/%m/%Y")
-STOP   = False
-SAMPLE_LENGTH = 10
-TYPE   = 2 # { 1 = static, 2 = dynamic, 3 = isolated_static, 4 = home/school}
-LAST_SAVE = None
-LAST_UPLOAD = None
+
+CSV = False
+
 DHT_module = False
 OPC = True
 
-if DHT_module: from . import DHT
-if OPC:
-    from . import R1
-    alpha = R1.alpha
-
-
 ### hours (not inclusive)
-SCHOOL = [9,15] # stage db during school hours, and upload outside these hours
+SCHOOL = [9,15] # stop 10 -2
+
+#how often we save to file
+SAMPLE_LENGTH = 10
+
+DATE   = date.today().strftime("%d/%m/%Y")
+STOP   = False
+TYPE   = 3 # { 1 = static, 2 = dynamic, 3 = isolated_static, 4 = home/school}
+LAST_SAVE = None
+LAST_UPLOAD = None
+SERIAL = os.popen('cat /sys/firmware/devicetree/base/serial-number').read() #16 char key
+
+########################################################
+##  Imports
+########################################################
+
+#Conditional Imports
+if DHT_module: from .Sensormod import DHT
+if OPC:
+    from .SensorMod import R1
+
+# Check Modules
+from .tests import pyvers
+from .SensorMod.log_manager import getlog
+log = getlog(__name__)
+print = log.print ## replace print function with a wrapper
+log.info('########################################################'.replace('#','~'))
+
+from .SensorMod.geolocate import lat,lon,alt
+loc = {'lat':lat,'lon':lon,'alt':alt}
+
+try:
+    from .SensorMod import oled
+    oled.standby(message = "   -- loading... --   ")
+    OLED_module=True
+except ImportError:
+    OLED_module=False
+log.info('USING OLED = %s'%OLED_module)
+
+# Exec modules
+from .SensorMod.exitcondition import GPIO
+from .SensorMod import power
+from .crypt import scramble
+if not CSV
+    from .SensorMod import db
+    from .SensorMod.db import builddb, __RDIR__
+else:
+    log.critical('WRITING CSV ONLY')
+    from .SensorMod.db import __RDIR__
+    CSV = __RDIR__+'/simplesensor.csv'
+    SAMPLE_LENGTH = SAMPLE_LENGTH_slow
+    from pandas import DataFrame
+    columns='SERIAL,TYPE,TIME,LOC,PM1,PM3,PM10,T,RH,BINS,SP,RC,UNIXTIME'.split(',')
+from .SensorMod import upload
+
+########################################################
+##  Setup
+########################################################
+
+if OPC: alpha = R1.alpha
+loading = power.blink_nonblock_inf()
+
+
 
 def interrupt(channel):
     log.warning("Pull Down on GPIO 21 detected: exiting program")
@@ -78,9 +113,12 @@ log.info('########################################################')
 log.info('starting {}'.format(datetime.now()))
 log.info('########################################################')
 
-
 if OPC: R1.clean(alpha)
 
+while loading.isAlive():
+    log.debug('stopping loading blink ...')
+    power.stopblink(loading)
+    loading.join(.1)
 
 
 ########################################################
@@ -149,20 +187,26 @@ def runcycle():
 
             unixtime = int(now.strftime("%s")) # to the second
 
+            bins = pickle.dumps([float(pm['Bin %s'%i]) for i in range(16)])
+
             results.append([
-                SERIAL,
-                TYPE,
-                now.strftime("%H%M%S"),
-                scramble(('%(lat)s_%(lon)s_%(alt)s'%loc).encode('utf-8')),
-                float(pm['PM1']),
-                float(pm['PM2.5']),
-                float(pm['PM10']),
-                float(temp),
-                float(rh),
-                float(pm['Sampling Period']),
-                int(pm['Reject count glitch']),
-                unixtime,
-                ] )
+                           SERIAL,
+                           TYPE,
+                           now.strftime("%H%M%S"),
+                           scramble(('%(lat)s_%(lon)s_%(alt)s'%loc).encode('utf-8')),
+                           float(pm['PM1']),
+                           float(pm['PM2.5']),
+                           float(pm['PM10']),
+                           float(temp),
+                           float(rh),
+                           bins,
+                           float(pm['Sampling Period']),
+                           int(pm['Reject count glitch']),
+                           unixtime,] )
+
+            if OLED_module:
+                now = str(datetime.utcnow()).split('.')[0]
+                oled.updatedata(now,results[-1])
 
         if STOP:break
         time.sleep(.1) # keep as 1
@@ -185,22 +229,36 @@ MAIN
 ########################################################
 
 while True:
-    #update less frequenty in loop
+    #update less frequently in loop
     #DATE = date.today().strftime("%d/%m/%Y")
+    if SAMPLE_LENGTH>0:
+        power.ledoff()
 
-    if OPC:
-        d = runcycle()
+        if OPC:
+            d = runcycle()
 
-        db.conn.executemany("INSERT INTO MEASUREMENTS (SERIAL,TYPE,TIME,LOC,PM1,PM3,PM10,T,RH,SP,RC,UNIXTIME) \
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?)", d );
+                ''' add to db'''
+        if not CSV:
+            if OLED_module: oled.standby(message = "   --  write db  --   ")
+            db.conn.executemany("INSERT INTO MEASUREMENTS (SERIAL,TYPE,TIME,LOC,PM1,PM3,PM10,T,RH,BINS,SP,RC,UNIXTIME) \
+                  VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)", d );
+            db.conn.commit() # dont forget to commit!
+            log.info('DB saved at {}'.format(datetime.utcnow().strftime("%X")))
+        else:
+            if OLED_module: oled.standby(message = "   --  write csv  --   ")
+            DataFrame(d,columns=columns).to_csv(CSV,mode='a')
+            log.info('CSV saved at {}'.format(datetime.utcnow().strftime("%X")))
 
-        db.conn.commit() # dont forget to commit!
+        power.ledon()
 
     if STOP:break
 
     hour = datetime.now().hour
 
-    if (hour > SCHOOL[0]) and (hour < SCHOOL[1]):
+    if CSV:
+        log.debug('CSV - skipping conditionals')
+
+    elif (hour > SCHOOL[0]) and (hour < SCHOOL[1]):
 
         DATE = date.today().strftime("%d/%m/%Y")
 
@@ -236,11 +294,15 @@ while True:
 
         if upload.online():
             if DATE != LAST_UPLOAD:
+                loading = power.blink_nonblock_inf_update()
                 #check if connected to wifi
                 ## SYNC
-                success = upload.sync()
-
-                if success:
+                try:
+                    upload_success = upload.upload()
+                except Exception as e:
+                    log.error("Error in trying to upload data to external storage")
+                    upload_success = False
+                if upload_success:
                     log.debug('upload complete on {}, hour = {}'.format(DATE, hour))
 
                     with open (os.path.join(__RDIR__,'.uploads'),'r') as f:
@@ -254,19 +316,32 @@ while True:
                 else:
                     log.debug('Upload failed on {}, hour = {}'.format(DATE, hour))
 
-                ## update time!
-                log.info(os.popen('sudo timedatectl &').read())
+                while loading.isAlive():
+                    power.stopblink(loading)
+                    loading.join(.1)
+
+            ## update time!
+            log.info(os.popen('sudo timedatectl &').read())
 
             ## run git pull
+            log.debug('Checking git repo')
             branchname = os.popen("git rev-parse --abbrev-ref HEAD").read()[:-1]
             os.system("git fetch -q origin {}".format(branchname))
             if not (os.system("git status --branch --porcelain | grep -q behind")):
                 STOP = True
 
 
+########################################################
+########################################################
 
+
+log.info('exiting - STOP: %s'%STOP)
+if not CSV:
+    db.conn.commit()
+    db.conn.close()
+power.ledon()
+if OLED_module: oled.shutdown()
 if not (os.system("git status --branch --porcelain | grep -q behind")):
-
     now = datetime.utcnow().strftime("%F %X")
     log.critical('Updates available. We need to reboot. Shutting down at %s'%now)
     os.system("sudo reboot")

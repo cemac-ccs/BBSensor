@@ -31,6 +31,8 @@ pip3 uninstall numpy -y;
 sudo apt-get install python3-numpy --yes ;
 pip3 install pandas;
 pip3 install boto3; # for uploading data to aws
+pip3 install adal
+pip3 install Office365-REST-Python-Client==2.2.2 # for uploading data to sharepoint
 
 
 #/dev/ttyS0 is owned by the user root and the group dialout, so to be able to acesss the serial device, I would add myself to the dialout group:

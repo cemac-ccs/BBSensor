@@ -1,3 +1,6 @@
 [submodule "py-opc-R1"]
 	path = py-opc-R1
 	url = https://github.com/cemac/py-opc-R1
+[submodule "serverpi/SensorMod"]
+	path = serverpi/SensorMod
+	url = https://github.com/cemac/SensorMod
